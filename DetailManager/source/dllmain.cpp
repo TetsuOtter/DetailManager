@@ -91,6 +91,24 @@ BOOL WINAPI DllMain(
 	return true;
 }
 
+#pragma managed
+System::Reflection::Assembly^ customAssemblyResolver(System::Object^ obj, System::ResolveEventArgs^ args)
+{
+    System::Reflection::Assembly^ asmToRet = nullptr;
+    System::Reflection::AssemblyName^ asmName = gcnew System::Reflection::AssemblyName(args->Name);
+
+    if (args->RequestingAssembly == nullptr)
+        return nullptr;
+
+    System::String^ requestingAsmLocation = System::IO::Path::GetDirectoryName(args->RequestingAssembly->Location);
+    System::String^ dllPathToFind = System::IO::Path::Combine(requestingAsmLocation, asmName->Name + ".dll");
+
+    if (System::IO::File::Exists(dllPathToFind))
+        asmToRet = System::Reflection::Assembly::LoadFrom(dllPathToFind);
+
+    return asmToRet;
+}
+
 // Called when this plug-in is loaded
 void WINAPI atsLoad()
 {
