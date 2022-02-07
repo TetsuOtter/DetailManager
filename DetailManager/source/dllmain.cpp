@@ -122,6 +122,7 @@ void WINAPI atsLoad()
     wchar_t detailmodules_txt_path[MAX_PATH];
 
     g_first_time = true;
+    System::AppDomain::CurrentDomain->AssemblyResolve += g_managed::resolve_event_handler;
 
     int ret;
     {
@@ -225,6 +226,8 @@ void WINAPI atsDispose()
 		}
         FreeLibrary(g_detailmodules[i].hm_dll);
     }
+
+    System::AppDomain::CurrentDomain->AssemblyResolve -= g_managed::resolve_event_handler;
 
     memset(g_detailmodules, 0, sizeof(ST_DETAILMODULE_ATS_DELEGATE_FUNC));
     g_num_of_detailmodules = 0;
