@@ -51,13 +51,20 @@ ATS_HANDLES g_handles[2];
 
 bool g_first_time;
 
+
+System::Reflection::Assembly^ customAssemblyResolver(System::Object^ obj, System::ResolveEventArgs^ args);
+
+ref struct g_managed {
+  static System::ResolveEventHandler^ resolve_event_handler = gcnew System::ResolveEventHandler(customAssemblyResolver);
+};
+
 #include <sys/stat.h>
 #include <stdio.h>
 
 BOOL WINAPI DllMain(
-					HINSTANCE hinstDLL,  // DLL ƒ‚ƒWƒ…[ƒ‹‚Ìƒnƒ“ƒhƒ‹
-					DWORD fdwReason,     // ŠÖ”‚ğŒÄ‚Ño‚·——R
-					LPVOID lpvReserved   // —\–ñÏ‚İ
+					HINSTANCE hinstDLL,  // DLL ï¿½ï¿½ï¿½Wï¿½ï¿½ï¿½[ï¿½ï¿½ï¿½Ìƒnï¿½ï¿½ï¿½hï¿½ï¿½
+					DWORD fdwReason,     // ï¿½Öï¿½ï¿½ï¿½ï¿½Ä‚Ñoï¿½ï¿½ï¿½ï¿½ï¿½R
+					LPVOID lpvReserved   // ï¿½\ï¿½ï¿½Ï‚ï¿½
 					)
 {
 	switch (fdwReason)
