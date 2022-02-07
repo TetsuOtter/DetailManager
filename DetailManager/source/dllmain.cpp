@@ -62,9 +62,9 @@ ref struct g_managed {
 #include <stdio.h>
 
 BOOL WINAPI DllMain(
-					HINSTANCE hinstDLL,  // DLL ���W���[���̃n���h��
-					DWORD fdwReason,     // �֐����Ăяo�����R
-					LPVOID lpvReserved   // �\��ς�
+					HINSTANCE hinstDLL,  // DLL モジュールのハンドル
+					DWORD fdwReason,     // 関数を呼び出す理由
+					LPVOID lpvReserved   // 予約済み
 					)
 {
 	switch (fdwReason)
