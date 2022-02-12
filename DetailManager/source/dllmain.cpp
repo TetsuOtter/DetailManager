@@ -61,6 +61,7 @@ ref struct g_managed {
 #include <sys/stat.h>
 #include <stdio.h>
 
+#pragma unmanaged
 BOOL WINAPI DllMain(
 					HINSTANCE hinstDLL,  // DLL モジュールのハンドル
 					DWORD fdwReason,     // 関数を呼び出す理由
