@@ -1,4 +1,5 @@
 #include "dllmain.hpp"
+#include "managed_interfaces.hpp"
 wchar_t g_module_dir[MAX_PATH];
 
 #define MAX_DETAILMODULE_NUM 64
