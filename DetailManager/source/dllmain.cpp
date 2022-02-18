@@ -51,19 +51,27 @@ ATS_HANDLES g_handles[2];
 
 bool g_first_time;
 
+
+System::Reflection::Assembly^ customAssemblyResolver(System::Object^ obj, System::ResolveEventArgs^ args);
+
+ref struct g_managed {
+  static System::ResolveEventHandler^ resolve_event_handler = gcnew System::ResolveEventHandler(customAssemblyResolver);
+};
+
 #include <sys/stat.h>
 #include <stdio.h>
 
+#pragma unmanaged
 BOOL WINAPI DllMain(
-					HINSTANCE hinstDLL,  // DLL モジュールのハンドル
-					DWORD fdwReason,     // 関数を呼び出す理由
-					LPVOID lpvReserved   // 予約済み
-					)
+                    HINSTANCE hinstDLL,  // DLL モジュールのハンドル
+                    DWORD fdwReason,     // 関数を呼び出す理由
+                    LPVOID lpvReserved   // 予約済み
+                    )
 {
-	switch (fdwReason)
-	{
-	case DLL_PROCESS_ATTACH:
-	case DLL_THREAD_ATTACH:
+    switch (fdwReason)
+    {
+    case DLL_PROCESS_ATTACH:
+    case DLL_THREAD_ATTACH:
 
         {
             wchar_t fullpath[MAX_PATH];
@@ -73,22 +81,40 @@ BOOL WINAPI DllMain(
             GetModuleFileNameW(hinstDLL, fullpath, MAX_PATH);
             _wsplitpath_s(fullpath, drive, MAX_PATH, dir, MAX_PATH, 0, 0, 0, 0);
 
-            wcscpy(g_module_dir, drive);
-            wcscat(g_module_dir, dir);
+            wcscpy_s(g_module_dir, drive);
+            wcscat_s(g_module_dir, dir);
         }
-		
+
         break;
 
-	case DLL_THREAD_DETACH:
+    case DLL_THREAD_DETACH:
         break;
     case DLL_PROCESS_DETACH:
         {
             atsDispose();
         }
         break;
-	}
+    }
 
-	return true;
+    return true;
+}
+
+#pragma managed
+System::Reflection::Assembly^ customAssemblyResolver(System::Object^ obj, System::ResolveEventArgs^ args)
+{
+    System::Reflection::Assembly^ asmToRet = nullptr;
+    System::Reflection::AssemblyName^ asmName = gcnew System::Reflection::AssemblyName(args->Name);
+
+    if (args->RequestingAssembly == nullptr)
+        return nullptr;
+
+    System::String^ requestingAsmLocation = System::IO::Path::GetDirectoryName(args->RequestingAssembly->Location);
+    System::String^ dllPathToFind = System::IO::Path::Combine(requestingAsmLocation, asmName->Name + ".dll");
+
+    if (System::IO::File::Exists(dllPathToFind))
+        asmToRet = System::Reflection::Assembly::LoadFrom(dllPathToFind);
+
+    return asmToRet;
 }
 
 // Called when this plug-in is loaded
@@ -97,6 +123,7 @@ void WINAPI atsLoad()
     wchar_t detailmodules_txt_path[MAX_PATH];
 
     g_first_time = true;
+    System::AppDomain::CurrentDomain->AssemblyResolve += g_managed::resolve_event_handler;
 
     int ret;
     {
@@ -106,21 +133,23 @@ void WINAPI atsLoad()
         memset(g_detailmodules, 0, sizeof(ST_DETAILMODULE_ATS_DELEGATE_FUNC) * MAX_DETAILMODULE_NUM);
         memset(g_handles, 0, sizeof(ATS_HANDLES) * 2);
 
-        wcscpy(detailmodules_txt_path, g_module_dir);
-        wcscat(detailmodules_txt_path, L"\\detailmodules.txt");
+        wcscpy_s(detailmodules_txt_path, g_module_dir);
+        wcscat_s(detailmodules_txt_path, L"\\detailmodules.txt");
         
         ret = _wstat(detailmodules_txt_path, &buf);
     }
 
     if (!ret)
     {
-        FILE* fp = _wfopen(detailmodules_txt_path, L"r");
+        FILE *fp = NULL;
+        _wfopen_s(&fp, detailmodules_txt_path, L"r");
 
         while (!feof(fp))
         {
             char module_path[MAX_PATH];
             wchar_t module_full_path[MAX_PATH],
                     module_path_wcs[MAX_PATH];
+            size_t tmp = 0;
 
             memset(module_path, 0, sizeof(char) * MAX_PATH);
 
@@ -135,10 +164,10 @@ void WINAPI atsLoad()
                 }
             }
 
-            wcscpy(module_full_path, g_module_dir);
-            mbstowcs(module_path_wcs, module_path, MAX_PATH);
+            wcscpy_s(module_full_path, g_module_dir);
+            mbstowcs_s(&tmp, module_path_wcs, module_path, MAX_PATH);
 //            wcscat(module_full_path, L"..\\..\\Plugin\\");
-            wcscat(module_full_path, module_path_wcs);
+            wcscat_s(module_full_path, module_path_wcs);
 
             {
                 struct _stat buf;
@@ -169,10 +198,10 @@ void WINAPI atsLoad()
 
                     memset(&g_detailmodules[g_num_of_detailmodules].last_handle, 0, sizeof(ATS_HANDLES));
 
-					if (g_detailmodules[g_num_of_detailmodules].atsLoad != NULL)
-					{
-						g_detailmodules[g_num_of_detailmodules].atsLoad();
-					}
+                    if (g_detailmodules[g_num_of_detailmodules].atsLoad != NULL)
+                    {
+                        g_detailmodules[g_num_of_detailmodules].atsLoad();
+                    }
 
                     ++g_num_of_detailmodules;
                 }
@@ -192,12 +221,14 @@ void WINAPI atsDispose()
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsDispose != NULL)
-		{
-			g_detailmodules[i].atsDispose();
-		}
+        if (g_detailmodules[i].atsDispose != NULL)
+        {
+            g_detailmodules[i].atsDispose();
+        }
         FreeLibrary(g_detailmodules[i].hm_dll);
     }
+
+    System::AppDomain::CurrentDomain->AssemblyResolve -= g_managed::resolve_event_handler;
 
     memset(g_detailmodules, 0, sizeof(ST_DETAILMODULE_ATS_DELEGATE_FUNC));
     g_num_of_detailmodules = 0;
@@ -207,7 +238,7 @@ void WINAPI atsDispose()
 // Returns the version numbers of ATS plug-in
 int WINAPI atsGetPluginVersion()
 {
-	return ATS_VERSION;
+    return ATS_VERSION;
 }
 
 // Called when the train is loaded
@@ -215,10 +246,10 @@ void WINAPI atsSetVehicleSpec(ATS_VEHICLESPEC vspec)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsSetVehicleSpec != NULL)
-		{
-			g_detailmodules[i].atsSetVehicleSpec(vspec);
-		}
+        if (g_detailmodules[i].atsSetVehicleSpec != NULL)
+        {
+            g_detailmodules[i].atsSetVehicleSpec(vspec);
+        }
     }
 }
 
@@ -227,10 +258,10 @@ void WINAPI atsInitialize(int param)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsInitialize != NULL)
-		{
-			g_detailmodules[i].atsInitialize(param);
-		}
+        if (g_detailmodules[i].atsInitialize != NULL)
+        {
+            g_detailmodules[i].atsInitialize(param);
+        }
     }
 }
 
@@ -245,20 +276,20 @@ ATS_HANDLES WINAPI atsElapse(ATS_VEHICLESTATE vs, int *p_panel, int *p_sound)
         {
             for (int i = 0; i < g_num_of_detailmodules; ++i)
             {
-				if (g_detailmodules[i].atsSetPower != NULL)
-				{
-					g_detailmodules[i].atsSetPower(g_handles[0].Power);
-				}
+                if (g_detailmodules[i].atsSetPower != NULL)
+                {
+                    g_detailmodules[i].atsSetPower(g_handles[0].Power);
+                }
 
-				if (g_detailmodules[i].atsSetBrake != NULL)
-				{
-					g_detailmodules[i].atsSetBrake(g_handles[0].Brake);
-				}
+                if (g_detailmodules[i].atsSetBrake != NULL)
+                {
+                    g_detailmodules[i].atsSetBrake(g_handles[0].Brake);
+                }
 
-				if (g_detailmodules[i].atsSetReverser != NULL)
-				{
-	                g_detailmodules[i].atsSetReverser(g_handles[0].Reverser);
-				}
+                if (g_detailmodules[i].atsSetReverser != NULL)
+                {
+                    g_detailmodules[i].atsSetReverser(g_handles[0].Reverser);
+                }
             }
 
             g_first_time = false;
@@ -267,68 +298,68 @@ ATS_HANDLES WINAPI atsElapse(ATS_VEHICLESTATE vs, int *p_panel, int *p_sound)
         {
             if (g_handles[0].Power != g_handles[1].Power)
             {
-				if (g_detailmodules[0].atsSetPower != NULL)
-				{
-					g_detailmodules[0].atsSetPower(g_handles[0].Power);
-				}
+                if (g_detailmodules[0].atsSetPower != NULL)
+                {
+                    g_detailmodules[0].atsSetPower(g_handles[0].Power);
+                }
             }
 
             if (g_handles[0].Brake != g_handles[1].Brake)
             {
-				if (g_detailmodules[0].atsSetBrake != NULL)
-				{
-					g_detailmodules[0].atsSetBrake(g_handles[0].Brake);
-				}
+                if (g_detailmodules[0].atsSetBrake != NULL)
+                {
+                    g_detailmodules[0].atsSetBrake(g_handles[0].Brake);
+                }
             }
 
             if (g_handles[0].Reverser != g_handles[1].Reverser)
             {
-				if (g_detailmodules[0].atsSetReverser != NULL)
-				{
-					g_detailmodules[0].atsSetReverser(g_handles[0].Reverser);
-				}
+                if (g_detailmodules[0].atsSetReverser != NULL)
+                {
+                    g_detailmodules[0].atsSetReverser(g_handles[0].Reverser);
+                }
             }
         }
 
         g_handles[1] = g_handles[0];
 
         if (g_detailmodules[0].atsElapse != NULL)
-		{
-			ret = g_detailmodules[0].atsElapse(vs, p_panel, p_sound);
-		}
+        {
+            ret = g_detailmodules[0].atsElapse(vs, p_panel, p_sound);
+        }
 
         for (int i = 1; i < g_num_of_detailmodules; ++i)
         {
             if (g_detailmodules[i].last_handle.Power != ret.Power)
             {
-				if (g_detailmodules[i].atsSetPower != NULL)
-				{
-					g_detailmodules[i].atsSetPower(ret.Power);
-				}
+                if (g_detailmodules[i].atsSetPower != NULL)
+                {
+                    g_detailmodules[i].atsSetPower(ret.Power);
+                }
             }
 
             if (g_detailmodules[i].last_handle.Brake != ret.Brake)
             {
-				if (g_detailmodules[i].atsSetBrake != NULL)
-				{
-					g_detailmodules[i].atsSetBrake(ret.Brake);
-				}
+                if (g_detailmodules[i].atsSetBrake != NULL)
+                {
+                    g_detailmodules[i].atsSetBrake(ret.Brake);
+                }
             }
 
             if (g_detailmodules[i].last_handle.Reverser != ret.Reverser)
             {
-				if (g_detailmodules[i].atsSetReverser != NULL)
-				{
-					g_detailmodules[i].atsSetReverser(ret.Reverser);
-				}
+                if (g_detailmodules[i].atsSetReverser != NULL)
+                {
+                    g_detailmodules[i].atsSetReverser(ret.Reverser);
+                }
             }
 
             g_detailmodules[i].last_handle = ret;
 
-			if (g_detailmodules[i].atsElapse != NULL)
-			{
-				ret = g_detailmodules[i].atsElapse(vs, p_panel, p_sound);
-			}
+            if (g_detailmodules[i].atsElapse != NULL)
+            {
+                ret = g_detailmodules[i].atsElapse(vs, p_panel, p_sound);
+            }
         }
     }
     else
@@ -336,7 +367,7 @@ ATS_HANDLES WINAPI atsElapse(ATS_VEHICLESTATE vs, int *p_panel, int *p_sound)
         memset(&ret, 0, sizeof(ATS_HANDLES));
     }
 
-	return ret;
+    return ret;
 }
 
 // Called when the power is changed
@@ -362,10 +393,10 @@ void WINAPI atsKeyDown(int ats_key_code)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsKeyDown != NULL)
-		{
-			g_detailmodules[i].atsKeyDown(ats_key_code);
-		}
+        if (g_detailmodules[i].atsKeyDown != NULL)
+        {
+            g_detailmodules[i].atsKeyDown(ats_key_code);
+        }
     }
 }
 
@@ -374,10 +405,10 @@ void WINAPI atsKeyUp(int ats_key_code)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsKeyUp != NULL)
-		{
-			g_detailmodules[i].atsKeyUp(ats_key_code);
-		}
+        if (g_detailmodules[i].atsKeyUp != NULL)
+        {
+            g_detailmodules[i].atsKeyUp(ats_key_code);
+        }
     }
 }
 
@@ -386,10 +417,10 @@ void WINAPI atsHornBlow(int ats_horn)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsHornBlow != NULL)
-		{
-			g_detailmodules[i].atsHornBlow(ats_horn);
-		}
+        if (g_detailmodules[i].atsHornBlow != NULL)
+        {
+            g_detailmodules[i].atsHornBlow(ats_horn);
+        }
     }
 }
 
@@ -398,10 +429,10 @@ void WINAPI atsDoorOpen()
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsDoorOpen != NULL)
-		{
-			g_detailmodules[i].atsDoorOpen();
-		}
+        if (g_detailmodules[i].atsDoorOpen != NULL)
+        {
+            g_detailmodules[i].atsDoorOpen();
+        }
     }
 }
 
@@ -410,10 +441,10 @@ void WINAPI atsDoorClose()
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsDoorClose != NULL)
-		{
-			g_detailmodules[i].atsDoorClose();
-		}
+        if (g_detailmodules[i].atsDoorClose != NULL)
+        {
+            g_detailmodules[i].atsDoorClose();
+        }
     }
 }
 
@@ -422,10 +453,10 @@ void WINAPI atsSetSignal(int signal)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsSetSignal != NULL)
-		{
-			g_detailmodules[i].atsSetSignal(signal);
-		}
+        if (g_detailmodules[i].atsSetSignal != NULL)
+        {
+            g_detailmodules[i].atsSetSignal(signal);
+        }
     }
 }
 
@@ -434,9 +465,9 @@ void WINAPI atsSetBeaconData(ATS_BEACONDATA beacon_data)
 {
     for (int i = 0; i < g_num_of_detailmodules; ++i)
     {
-		if (g_detailmodules[i].atsSetBeaconData != NULL)
-		{
-			g_detailmodules[i].atsSetBeaconData(beacon_data);
-		}
+        if (g_detailmodules[i].atsSetBeaconData != NULL)
+        {
+            g_detailmodules[i].atsSetBeaconData(beacon_data);
+        }
     }
 }
