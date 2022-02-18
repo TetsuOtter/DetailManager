@@ -63,9 +63,9 @@ ref struct g_managed {
 
 #pragma unmanaged
 BOOL WINAPI DllMain(
-                    HINSTANCE hinstDLL,  // DLL モジュールのハンドル
-                    DWORD fdwReason,     // 関数を呼び出す理由
-                    LPVOID lpvReserved   // 予約済み
+                    HINSTANCE hinstDLL,  // DLL 繝｢繧ｸ繝･繝ｼ繝ｫ縺ｮ繝上Φ繝峨Ν
+                    DWORD fdwReason,     // 髢｢謨ｰ繧貞他縺ｳ蜃ｺ縺咏炊逕ｱ
+                    LPVOID lpvReserved   // 莠育ｴ�貂医∩
                     )
 {
     switch (fdwReason)
